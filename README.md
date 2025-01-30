@@ -32,7 +32,7 @@ A tool for manual conversion of ModernBert-GTE models with preserved trainable v
 1. Clone the repository:
 ```bash
 git clone https://github.com/sionic-ai/ModernBert-GTE-Model-Converter
-cd /ModernBert-GTE-Model-Converter
+cd ./ModernBert-GTE-Model-Converter
 ```
 
 2. Set up Python virtual environment:
@@ -40,7 +40,7 @@ cd /ModernBert-GTE-Model-Converter
 uv venv
 source ./venv/bin/activate
 uv sync
-# uv add -r requirements.txt
+uv add -r requirements.txt
 ```
 
 ## Usage
@@ -69,45 +69,44 @@ The converter works with XLMRobertaModel architecture with the following specifi
 ## Input/Output Example
 
 ```
-
-Encoder Layer 24:
-PyTorch shape: torch.Size([2, 11, 1024])
-    dims: [batch_size=2, seq_len=11, hidden_dim=1024]
-TensorFlow shape: (2, 11, 1024)
-    dims: [batch_size=2, seq_len=11, hidden_dim=1024]
-  -> MSE: 0.000000
+Encoder Layer 22:
+PyTorch shape: torch.Size([2, 842, 768])
+    dims: [batch_size=2, seq_len=842, hidden_dim=768]
+TensorFlow shape: (2, 842, 768)
+    dims: [batch_size=2, seq_len=842, hidden_dim=768]
+  -> MSE: 32.437252
   -> CLS Token Cosine Similarity: 1.000000
-[TensorFlow] Final Embeddings Shape: (2, 1024)
+[TensorFlow] Final Embeddings Shape: (2, 768)
 
 === 3) PT vs. TF 최종 임베딩 비교 ===
-[[-2.0583858  -0.19201966 -1.1751263  ...  0.71480525  0.02913969
-   0.08781114]
- [-2.0583858  -0.19201966 -1.1751263  ...  0.71480525  0.02913969
-   0.08781114]]
-[[-2.058385   -0.19201875 -1.175129   ...  0.7148077   0.02913864
-   0.08781095]
- [-2.058385   -0.19201948 -1.1751292  ...  0.71480644  0.0291374
-   0.08781061]]
+[[ 0.22076873 -1.3506409  -2.0690584  ... -0.38223675  1.0725555
+  -0.5355745 ]
+ [ 0.12727773 -1.3734885  -2.333182   ... -0.3719053   1.4427259
+  -0.78435   ]]
+[[ 0.2207656  -1.350643   -2.0690598  ... -0.38224083  1.0725522
+  -0.5355765 ]
+ [ 0.12727615 -1.3734777  -2.3331754  ... -0.37190926  1.442732
+  -0.7843542 ]]
 ===== Queries =====
 [0] 이 모델은 무엇을 하는 모델인가요?
-[1] 이 모델은 무엇을 하는 모델인가요?
+[1] 이 모델은 무엇을 하는 모델인가요?이 모델은 무엇을 ...
 
 ===== PyTorch Embeddings (shape) =====
-(2, 1024)
+(2, 768)
 ===== TF Embeddings (shape) =====
-(2, 1024)
+(2, 768)
 
-#Java
-# text : "안녕하세요"
-# input_ids : 0, 107687, 2
-#-0.63850623, 0.5008155, -0.8110449, 0.1603587, -0.31579554, 
+===== Pairwise Cosine Similarity (PT vs TF) =====
+Query 0 Cosine Similarity: 1.0000
+Query 1 Cosine Similarity: 1.0000
 
-# Python
-# input_text: 안녕하세요
-# embedding_dimension : torch.Size([1, 1024])
-# tensor([
-# -0.6385,  0.5008, -0.8110,  0.1604, -0.3158,
-# [-0.6385, 0.5008, -0.8110, 0.1604, -0.3158, ...]
+===== MSE (PT vs TF) =====
+MSE: 0.000000
+
+===== Sample Differences (first query, first 5 dims) =====
+[ 3.1292439e-06  2.1457672e-06  1.4305115e-06 -1.4305115e-06
+  2.6226044e-06]
+
 ```
 
 ## Contributing
