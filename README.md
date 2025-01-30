@@ -5,7 +5,6 @@ A tool for manual conversion of ModernBert-GTE models with preserved trainable v
 ## Features
 
 - Manual conversion of ModernBert-GTE models with preserved model architecture
-- Direct control over model outputs (colbert, sparse, etc.)
 - Resolution for ONNX conversion failures
 - Solution for protobuf 2GB file size limitation
 - Preservation of trainable variable information in the model structure
