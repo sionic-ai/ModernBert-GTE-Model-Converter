@@ -59,12 +59,12 @@ uv run model_conversion_validator.py
 
 The converter works with XLMRobertaModel architecture with the following specifications:
 
-- Hidden size: 1024
-- Attention heads: 16
-- Hidden layers: 24
-- Maximum position embeddings: 8194
-- Intermediate size: 4096
-- Vocabulary size: 250002
+- Hidden size: 768
+- Attention heads: 12
+- Hidden layers: 22
+- Maximum position embeddings: 8192
+- Intermediate size: 1152
+- Vocabulary size: 50368
 
 ## Input/Output Example
 
