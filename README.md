@@ -31,8 +31,8 @@ A tool for manual conversion of ModernBert-GTE models with preserved trainable v
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/sionic-ai/ModernBert-GET-Model-Converter
-cd /ModernBert-GET-Model-Converter
+git clone https://github.com/sionic-ai/ModernBert-GTE-Model-Converter
+cd /ModernBert-GTE-Model-Converter
 ```
 
 2. Set up Python virtual environment:
