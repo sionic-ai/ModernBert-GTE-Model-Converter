@@ -3,6 +3,7 @@ import numpy as np
 import tensorflow as tf
 from transformers import AutoTokenizer, AutoModel
 
+
 def load_original_pytorch_model(model_name_or_path):
     """
     원본 Hugging Face(PyTorch) 모델 및 토크나이저를 로드한 뒤,
@@ -16,12 +17,12 @@ def load_original_pytorch_model(model_name_or_path):
 
 
 def encode_with_pytorch_model(
-        model,
-        tokenizer,
-        queries,
-        max_length=8192,
-        use_cls_pooling=True,
-        return_hidden_states=True
+    model,
+    tokenizer,
+    queries,
+    max_length=8192,
+    use_cls_pooling=True,
+    return_hidden_states=True,
 ):
     """
     PyTorch 모델로 임베딩 추출하는 함수.
@@ -34,7 +35,7 @@ def encode_with_pytorch_model(
         padding=True,
         truncation=True,
         max_length=max_length,
-        return_tensors='pt'
+        return_tensors="pt",
     )
 
     with torch.no_grad():
@@ -46,7 +47,9 @@ def encode_with_pytorch_model(
         embeddings = hidden_states[:, 0, :]
     else:
         # Mean Pooling
-        attention_mask = inputs['attention_mask'].unsqueeze(-1).expand(hidden_states.size()).float()
+        attention_mask = (
+            inputs["attention_mask"].unsqueeze(-1).expand(hidden_states.size()).float()
+        )
         sum_embeddings = torch.sum(hidden_states * attention_mask, dim=1)
         sum_mask = torch.clamp(attention_mask.sum(dim=1), min=1e-9)
         embeddings = sum_embeddings / sum_mask
@@ -69,7 +72,9 @@ def show_all_layer_outputs_pytorch(all_layer_outputs, print_values=False):
         if print_values:
             # 첫 배치, 첫 토큰, 앞 5개 차원
             sample_vals = hs[0, 0, :5]
-            print(f"    Sample values (batch=0, token=0, dims=0~4): {sample_vals.cpu().numpy()}")
+            print(
+                f"    Sample values (batch=0, token=0, dims=0~4): {sample_vals.cpu().numpy()}"
+            )
     print()
 
 
@@ -99,20 +104,21 @@ def encode_with_tf_model(serving_fn, tokenizer, queries, max_length=8192):
         padding=True,
         truncation=True,
         max_length=max_length,
-        return_tensors="tf"
+        return_tensors="tf",
     )
     print(inputs)
 
     outputs = serving_fn(
-        input_ids=inputs["input_ids"],
-        attention_mask=inputs["attention_mask"]
+        input_ids=inputs["input_ids"], attention_mask=inputs["attention_mask"]
     )
     embeddings = outputs["dense_vecs"].numpy()  # (batch_size, hidden_size)
 
     return embeddings
 
 
-def encode_with_tf_model_and_get_hidden_states(serving_fn, tokenizer, queries, max_length=8192):
+def encode_with_tf_model_and_get_hidden_states(
+    serving_fn, tokenizer, queries, max_length=8192
+):
     """
     *주의*:
     - TF SavedModel에서 레이어별 히든 스테이트도 반환한다고 가정할 때 사용 가능.
@@ -123,14 +129,12 @@ def encode_with_tf_model_and_get_hidden_states(serving_fn, tokenizer, queries, m
         padding=True,
         truncation=True,
         max_length=max_length,
-        return_tensors="tf"
+        return_tensors="tf",
     )
 
     outputs = serving_fn(
-        input_ids=inputs["input_ids"],
-        attention_mask=inputs["attention_mask"]
+        input_ids=inputs["input_ids"], attention_mask=inputs["attention_mask"]
     )
-
 
     hidden_states = outputs["hidden_states"]  # (num_layers, batch, seq_len, hidden_dim)
     final_embeddings = outputs["dense_vecs"]
@@ -169,62 +173,70 @@ def mse(a, b):
 
 
 def compare_layer_outputs(pt_all_layer_outputs, tf_all_layer_outputs):
-   """
-   PyTorch vs. TensorFlow 레이어별로 MSE, Cosine Similarity 등을 비교해주는 함수.
-   - pt_all_layer_outputs: tuple of torch.Tensor (길이: num_layers_PyTorch)
-     (예: [embedding_output, layer1_output, layer2_output, ...])
-   - tf_all_layer_outputs: tf.Tensor (shape: [num_layers_TF, batch_size, seq_len, hidden_dim])
-     (예: 0번이 embedding_output, 1번이 1번 레이어, ...)
-   """
-   print("\n=== Compare Layer Outputs (PyTorch vs TensorFlow) ===")
+    """
+    PyTorch vs. TensorFlow 레이어별로 MSE, Cosine Similarity 등을 비교해주는 함수.
+    - pt_all_layer_outputs: tuple of torch.Tensor (길이: num_layers_PyTorch)
+      (예: [embedding_output, layer1_output, layer2_output, ...])
+    - tf_all_layer_outputs: tf.Tensor (shape: [num_layers_TF, batch_size, seq_len, hidden_dim])
+      (예: 0번이 embedding_output, 1번이 1번 레이어, ...)
+    """
+    print("\n=== Compare Layer Outputs (PyTorch vs TensorFlow) ===")
 
-   num_pt_layers = len(pt_all_layer_outputs)
-   num_tf_layers = tf_all_layer_outputs.shape[0]
-   min_layers = min(num_pt_layers, num_tf_layers)
+    num_pt_layers = len(pt_all_layer_outputs)
+    num_tf_layers = tf_all_layer_outputs.shape[0]
+    min_layers = min(num_pt_layers, num_tf_layers)
 
+    layer_names = {
+        0: "Embedding Layer",
+    }
+    for i in range(0, min_layers):
+        layer_names[i] = f"Encoder Layer {i}"
 
-   layer_names = {
-       0: "Embedding Layer",
-   }
-   for i in range(0, min_layers):
-       layer_names[i] = f"Encoder Layer {i}"
+    print("pt_all_layer_outputs", len(pt_all_layer_outputs))
 
-   print("pt_all_layer_outputs", len(pt_all_layer_outputs))
+    print("tf_all_layer_outputs", len(tf_all_layer_outputs))
 
-   print("tf_all_layer_outputs", len(tf_all_layer_outputs))
+    for layer_idx in range(min_layers):
+        pt_layer = pt_all_layer_outputs[
+            layer_idx
+        ]  # shape: [batch, seq_len, hidden_dim]
+        tf_layer = tf_all_layer_outputs[
+            layer_idx
+        ]  # shape: [batch, seq_len, hidden_dim]
+        tf_layer_np = tf_layer.numpy()
 
-   for layer_idx in range(min_layers):
-       pt_layer = pt_all_layer_outputs[layer_idx]  # shape: [batch, seq_len, hidden_dim]
-       tf_layer = tf_all_layer_outputs[layer_idx]  # shape: [batch, seq_len, hidden_dim]
-       tf_layer_np = tf_layer.numpy()
+        print(f"\n{layer_names[layer_idx]}:")
+        print(f"\n{layer_names[layer_idx]}:")
+        print(f"PyTorch shape: {pt_layer.shape}")
+        print(
+            f"    dims: [batch_size={pt_layer.shape[0]}, seq_len={pt_layer.shape[1]}, hidden_dim={pt_layer.shape[2]}]"
+        )
+        print(f"TensorFlow shape: {tf_layer.shape}")
+        print(
+            f"    dims: [batch_size={tf_layer.shape[0]}, seq_len={tf_layer.shape[1]}, hidden_dim={tf_layer.shape[2]}]"
+        )
 
-       print(f"\n{layer_names[layer_idx]}:")
-       print(f"\n{layer_names[layer_idx]}:")
-       print(f"PyTorch shape: {pt_layer.shape}")
-       print(f"    dims: [batch_size={pt_layer.shape[0]}, seq_len={pt_layer.shape[1]}, hidden_dim={pt_layer.shape[2]}]")
-       print(f"TensorFlow shape: {tf_layer.shape}")
-       print(f"    dims: [batch_size={tf_layer.shape[0]}, seq_len={tf_layer.shape[1]}, hidden_dim={tf_layer.shape[2]}]")
+        layer_mse = mse(pt_layer.detach().cpu().numpy(), tf_layer_np)
+        pt_cls_vec = pt_layer[0, 0, :].detach().cpu().numpy()
 
-       layer_mse = mse(pt_layer.detach().cpu().numpy(), tf_layer_np)
-       pt_cls_vec = pt_layer[0, 0, :].detach().cpu().numpy()
+        tf_cls_vec = tf_layer_np[0, 0, :]
 
-       tf_cls_vec = tf_layer_np[0, 0, :]
+        cls_cos_sim = cosine_similarity(
+            pt_cls_vec[np.newaxis, :], tf_cls_vec[np.newaxis, :]
+        )[0]
 
-
-       cls_cos_sim = cosine_similarity(pt_cls_vec[np.newaxis, :], tf_cls_vec[np.newaxis, :])[0]
-
-       print(f"  -> MSE: {layer_mse:.6f}")
-       print(f"  -> CLS Token Cosine Similarity: {cls_cos_sim:.6f}")
+        print(f"  -> MSE: {layer_mse:.6f}")
+        print(f"  -> CLS Token Cosine Similarity: {cls_cos_sim:.6f}")
 
 
 def main():
     # 경로 설정 (예: ./bge-m3, ././gte-modernbert-base)
-    model_name_or_path = "./gte-modernbert-base"  # PyTorch 원본
+    model_name_or_path = "Alibaba-NLP/gte-modernbert-base"  # PyTorch 원본
     saved_model_dir = "./converted_gte-modernbert-base"  # TF 변환본
 
     queries = [
-        "이 모델은 무엇을 하는 모델인가요?"*1,
-        "이 모델은 무엇을 하는 모델인가요?"*30
+        "이 모델은 무엇을 하는 모델인가요?" * 1,
+        "이 모델은 무엇을 하는 모델인가요?" * 30,
     ]
 
     print("=== 1) PyTorch 모델 로드 및 인코딩 (레이어별 출력 포함) ===")
@@ -235,28 +247,24 @@ def main():
         queries,
         max_length=8192,
         use_cls_pooling=True,
-        return_hidden_states=True
+        return_hidden_states=True,
     )
     show_all_layer_outputs_pytorch(pt_all_layer_outputs, print_values=False)
 
     print("=== 2) TensorFlow 모델 로드 및 인코딩 ===")
     tf_serving_fn, tf_tokenizer = load_converted_tf_model(saved_model_dir)
     tf_embeddings = encode_with_tf_model(
-        tf_serving_fn,
-        tf_tokenizer,
-        queries,
-        max_length=8192
+        tf_serving_fn, tf_tokenizer, queries, max_length=8192
     )
 
     # (옵션) 레이어별 출력 노출 여부 확인
     try:
-        tf_embeddings_with_layers, tf_all_layer_outputs = encode_with_tf_model_and_get_hidden_states(
-            tf_serving_fn,
-            tf_tokenizer,
-            queries,
-            max_length=8192
+        tf_embeddings_with_layers, tf_all_layer_outputs = (
+            encode_with_tf_model_and_get_hidden_states(
+                tf_serving_fn, tf_tokenizer, queries, max_length=8192
+            )
         )
-        #print(tf_all_layer_outputs)
+        # print(tf_all_layer_outputs)
         show_all_layer_outputs_tf(tf_all_layer_outputs, print_values=False)
 
         # [추가] 레이어별로 직접 비교
@@ -264,7 +272,9 @@ def main():
 
         print("[TensorFlow] Final Embeddings Shape:", tf_embeddings_with_layers.shape)
     except KeyError:
-        print("TensorFlow 서빙 시그니처에 hidden_states가 없습니다. (기본 TF 변환본일 가능성)")
+        print(
+            "TensorFlow 서빙 시그니처에 hidden_states가 없습니다. (기본 TF 변환본일 가능성)"
+        )
 
     print("\n=== 3) PT vs. TF 최종 임베딩 비교 ===")
 
@@ -273,7 +283,7 @@ def main():
 
     cos_sims = cosine_similarity(pt_embeddings, tf_embeddings)
 
-    errors = (pt_embeddings - tf_embeddings)
+    errors = pt_embeddings - tf_embeddings
     mse_val = mse(pt_embeddings, tf_embeddings)
 
     print("===== Queries =====")
