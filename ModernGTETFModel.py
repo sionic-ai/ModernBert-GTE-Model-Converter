@@ -5,7 +5,8 @@ from typing import Optional
 
 TFDTYPE = tf.float32
 
-def create_local_sliding_window_mask(global_mask_4d,window_size):
+
+def create_local_sliding_window_mask(global_mask_4d, window_size):
     """
     ModernBERT의 local attention을 위한 "양방향 슬라이딩 윈도우" 마스크를 만든 뒤,
     원본 global_mask(패딩 토큰 마스킹)와 결합하여 최종 4D float 마스크를 반환합니다.
@@ -35,7 +36,7 @@ def create_local_sliding_window_mask(global_mask_4d,window_size):
     # (S, S)에서의 distance 계산
     rows = tf.range(seq_len)[:, None]  # shape (S,1)
     cols = tf.range(seq_len)[None, :]  # shape (1,S)
-    distance = tf.abs(rows - cols)     # shape (S,S)
+    distance = tf.abs(rows - cols)  # shape (S,S)
 
     # distance가 window_size//2 이내면 True
     half_w = window_size // 2
@@ -57,7 +58,7 @@ def create_local_sliding_window_mask(global_mask_4d,window_size):
     #      밖일 때 -∞, 안일 때 0.0
     #   => global_mask_4d도 이미 "패딩 부분 -∞, 정상 부분 0.0" 형태이므로
     #      합산하면 "둘 중 하나라도 -∞이면 -∞"라는 효과가 남
-  
+
     final_local_4d = global_mask_4d + local_mask_4d  # (B,1,S,S)
 
     return final_local_4d
@@ -68,7 +69,9 @@ class MultiHeadAttention(tf.keras.layers.Layer):
         super().__init__(**kwargs)
 
         if d_model % num_heads != 0:
-            raise ValueError(f"d_model ({d_model}) must be divisible by num_heads ({num_heads})")
+            raise ValueError(
+                f"d_model ({d_model}) must be divisible by num_heads ({num_heads})"
+            )
 
         self.layer_id = layer_id
         self.num_heads = num_heads
@@ -77,10 +80,7 @@ class MultiHeadAttention(tf.keras.layers.Layer):
         self.head_dim = self.depth
         self.all_head_size = self.num_heads * self.head_dim
 
-        self.attnNorm = tf.keras.layers.LayerNormalization(
-            epsilon=1e-5,
-            center=False
-        )
+        self.attnNorm = tf.keras.layers.LayerNormalization(epsilon=1e-5, center=False)
 
         # QKV projection
         self.wqkv = tf.keras.layers.Dense(d_model * 3, use_bias=False)
@@ -102,9 +102,11 @@ class MultiHeadAttention(tf.keras.layers.Layer):
 
     def scaled_dot_product_attention(
         self,
-        query, key, value,
-        mask=None,   # 여기서 mask는 [batch_size, 1, seq_len, seq_len]
-        training=None
+        query,
+        key,
+        value,
+        mask=None,  # 여기서 mask는 [batch_size, 1, seq_len, seq_len]
+        training=None,
     ):
         """
         PyTorch처럼 'query @ key^T' 후 mask를 더해 Softmax
@@ -128,7 +130,7 @@ class MultiHeadAttention(tf.keras.layers.Layer):
         output = tf.matmul(attention_weights, value)
         return output
 
-    def call(self, inputs, mask=None, rope_embeds=None, training=False):
+    def __call__(self, inputs, mask=None, rope_embeds=None, training=False):
         """
         mask: 보통 [batch_size, 1, seq_len, seq_len] 형상
         rope_embeds: (cos, sin)
@@ -144,7 +146,7 @@ class MultiHeadAttention(tf.keras.layers.Layer):
         qkv = tf.reshape(qkv, [batch_size, seq_len, 3, self.num_heads, self.head_dim])
         # (3, B, head, S, head_dim)으로 transpose해도 되지만, 여기서는 아래처럼 unstack
         qkv = tf.transpose(qkv, perm=[2, 0, 3, 1, 4])  # [3, B, num_heads, S, head_dim]
-        q, k, v = tf.unstack(qkv, axis=0)             # 각각 [B, num_heads, S, head_dim]
+        q, k, v = tf.unstack(qkv, axis=0)  # 각각 [B, num_heads, S, head_dim]
 
         # Rotary
         if rope_embeds is not None:
@@ -159,11 +161,15 @@ class MultiHeadAttention(tf.keras.layers.Layer):
             # tf.tile 써도 되지만, 그냥 matmul에서 broadcasting 가능
             mask = tf.reshape(mask, [tf.shape(mask)[0], 1, seq_len, seq_len])
 
-        attention_output = self.scaled_dot_product_attention(q, k, v, mask=mask, training=training)
+        attention_output = self.scaled_dot_product_attention(
+            q, k, v, mask=mask, training=training
+        )
         # [B, heads, S, head_dim] -> [B, S, heads, head_dim]
         attention_output = tf.transpose(attention_output, perm=[0, 2, 1, 3])
         # -> [B, S, d_model]
-        attention_output = tf.reshape(attention_output, [batch_size, seq_len, self.d_model])
+        attention_output = tf.reshape(
+            attention_output, [batch_size, seq_len, self.d_model]
+        )
 
         # output proj
         attention_output = self.o(attention_output)
@@ -179,14 +185,15 @@ class NTKScalingRotaryEmbedding(tf.keras.layers.Layer):
     BERT이지만, local attention일 경우 max_position_embeddings를 줄여쓰거나,
     rope_theta를 다르게 쓸 수 있습니다.
     """
+
     def __init__(
-            self,
-            dim: int,
-            max_position_embeddings: int = 8192,
-            base: float = 160000.0,
-            scaling_factor: float = 1.0,
-            mixed_b: Optional[float] = None,
-            **kwargs
+        self,
+        dim: int,
+        max_position_embeddings: int = 8192,
+        base: float = 160000.0,
+        scaling_factor: float = 1.0,
+        mixed_b: Optional[float] = None,
+        **kwargs,
     ):
         super().__init__(**kwargs)
         max_position_embeddings = int(max_position_embeddings * scaling_factor)
@@ -213,7 +220,9 @@ class NTKScalingRotaryEmbedding(tf.keras.layers.Layer):
             # 혼합 계수일 때 (여기선 생략 가능)
             scaled_base = self.base
             base_inv_freq = self.base_inv_freq
-            a = tf.math.log(tf.cast(self.scaling_factor, TFDTYPE)) / tf.pow(self.dim / 2.0, self.mixed_b)
+            a = tf.math.log(tf.cast(self.scaling_factor, TFDTYPE)) / tf.pow(
+                self.dim / 2.0, self.mixed_b
+            )
             indices_1_to_d2 = tf.range(1, self.dim // 2 + 1, dtype=TFDTYPE)
             lambda_1_m = tf.exp(a * tf.pow(indices_1_to_d2, self.mixed_b))
             scaled_inv_freq = base_inv_freq / lambda_1_m
@@ -226,7 +235,7 @@ class NTKScalingRotaryEmbedding(tf.keras.layers.Layer):
     def _build_initial_cache(self):
         t = tf.range(self.max_position_embeddings, dtype=TFDTYPE)
         freqs = tf.einsum("i,j->ij", t, self.scaled_inv_freq)  # (max_len, dim/2)
-        emb = tf.concat([freqs, freqs], axis=-1)              # (max_len, dim)
+        emb = tf.concat([freqs, freqs], axis=-1)  # (max_len, dim)
         self.cos_cached = tf.cos(emb)
         self.sin_cached = tf.sin(emb)
 
@@ -257,7 +266,7 @@ class NTKScalingRotaryEmbedding(tf.keras.layers.Layer):
             cos, sin = tf.cond(
                 tf.greater(seq_len, self.max_position_embeddings),
                 use_new_cache,
-                use_cached
+                use_cached,
             )
 
         cos = tf.cast(cos, x.dtype)
@@ -266,7 +275,16 @@ class NTKScalingRotaryEmbedding(tf.keras.layers.Layer):
 
 
 class TransformerBlock(tf.keras.layers.Layer):
-    def __init__(self, d_model, num_heads, intermediate_size, dropout_rate=0.1, layer_id=0, config=None, **kwargs):
+    def __init__(
+        self,
+        d_model,
+        num_heads,
+        intermediate_size,
+        dropout_rate=0.1,
+        layer_id=0,
+        config=None,
+        **kwargs,
+    ):
         super().__init__(**kwargs)
 
         self.config = config
@@ -293,9 +311,7 @@ class TransformerBlock(tf.keras.layers.Layer):
         self.mlp_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, center=False)
 
         self.Wi = tf.keras.layers.Dense(
-            intermediate_size * 2,
-            name="intermediate.dense",
-            use_bias=False
+            intermediate_size * 2, name="intermediate.dense", use_bias=False
         )
         self.Wo = tf.keras.layers.Dense(d_model, name="output.dense", use_bias=False)
         self.output_dropout = tf.keras.layers.Dropout(dropout_rate)
@@ -324,7 +340,9 @@ class TransformerBlock(tf.keras.layers.Layer):
         if window_size is not None and window_size > 0:
             # attention_mask는 [batch, 1, seq_len, seq_len] 로 가정
             # local sliding window 마스크를 합성
-            attention_mask = create_local_sliding_window_mask(attention_mask, window_size)
+            attention_mask = create_local_sliding_window_mask(
+                attention_mask, window_size
+            )
         # else => 그대로 글로벌 마스크 (전체 토큰 attending)
 
         # (3) MHA
@@ -332,7 +350,7 @@ class TransformerBlock(tf.keras.layers.Layer):
             hidden_states,
             mask=attention_mask,
             rope_embeds=rope_embeds,
-            training=training
+            training=training,
         )
         hidden_states = hidden_states + attn_output
 
@@ -341,7 +359,7 @@ class TransformerBlock(tf.keras.layers.Layer):
         mlp_out = self.Wi(normed)
         # GLU
         x_in, gate = tf.split(mlp_out, 2, axis=-1)
-        #x_in = self.gelu_approx(x_in)
+        # x_in = self.gelu_approx(x_in)
         x_in = tf.nn.gelu(x_in)
         mlp_out = x_in * gate
         if training:
@@ -353,12 +371,24 @@ class TransformerBlock(tf.keras.layers.Layer):
 
 
 class ModernGTETensorFlow(tf.keras.Model):
-    def __init__(self, model_name, normalize_embeddings=False, use_fp16=True,
-                 query_instruction_for_retrieval=None, query_instruction_format="{}{}",
-                 pooling_method="cls", trust_remote_code=False, cache_dir=None,
-                 batch_size=256, query_max_length=512,
-                 passage_max_length=512, return_dense=True, return_sparse=False,
-                 return_colbert_vecs=False, dropout_rate=0.1):
+    def __init__(
+        self,
+        model_name,
+        normalize_embeddings=False,
+        use_fp16=True,
+        query_instruction_for_retrieval=None,
+        query_instruction_format="{}{}",
+        pooling_method="cls",
+        trust_remote_code=False,
+        cache_dir=None,
+        batch_size=256,
+        query_max_length=512,
+        passage_max_length=512,
+        return_dense=True,
+        return_sparse=False,
+        return_colbert_vecs=False,
+        dropout_rate=0.1,
+    ):
         super().__init__(name="bge-m3-tensorflow")
 
         self.model_name = model_name
@@ -376,7 +406,9 @@ class ModernGTETensorFlow(tf.keras.Model):
         self.dropout_rate = dropout_rate
 
         # 로딩
-        self.config = AutoConfig.from_pretrained(model_name, trust_remote_code=trust_remote_code)
+        self.config = AutoConfig.from_pretrained(
+            model_name, trust_remote_code=trust_remote_code
+        )
 
         # ModernBertConfig와 유사한 속성들 예시로 옮겨둠
         self.d_model = self.config.hidden_size
@@ -403,9 +435,7 @@ class ModernGTETensorFlow(tf.keras.Model):
         self._build_pooler()
 
         self.tokenizer = AutoTokenizer.from_pretrained(
-            model_name,
-            trust_remote_code=trust_remote_code,
-            cache_dir=cache_dir
+            model_name, trust_remote_code=trust_remote_code, cache_dir=cache_dir
         )
 
     def _build_embeddings(self):
@@ -416,10 +446,7 @@ class ModernGTETensorFlow(tf.keras.Model):
                 initializer=tf.keras.initializers.TruncatedNormal(stddev=0.02),
             )
 
-        self.layerNorm = tf.keras.layers.LayerNormalization(
-            epsilon=1e-5,
-            center=False
-        )
+        self.layerNorm = tf.keras.layers.LayerNormalization(epsilon=1e-5, center=False)
         self.dropout = tf.keras.layers.Dropout(rate=self.dropout_rate)
 
     def _build_encoder_layers(self):
@@ -432,7 +459,7 @@ class ModernGTETensorFlow(tf.keras.Model):
                 dropout_rate=self.dropout_rate,
                 name=f"encoder.layer.{i}",
                 layer_id=i,
-                config=self.config
+                config=self.config,
             )
             self.encoder_layers.append(layer)
 
@@ -446,8 +473,8 @@ class ModernGTETensorFlow(tf.keras.Model):
             'attention_mask': (B, S)
         }
         """
-        input_ids = tf.cast(inputs['input_ids'], tf.int32)
-        attention_mask_2d = tf.cast(inputs['attention_mask'], TFDTYPE)  # (B,S)
+        input_ids = tf.cast(inputs["input_ids"], tf.int32)
+        attention_mask_2d = tf.cast(inputs["attention_mask"], TFDTYPE)  # (B,S)
 
         batch_size = tf.shape(input_ids)[0]
         seq_len = tf.shape(input_ids)[1]
@@ -479,9 +506,7 @@ class ModernGTETensorFlow(tf.keras.Model):
         # Encoder
         for layer in self.encoder_layers:
             hidden_states = layer(
-                hidden_states,
-                attention_mask=shaped_mask,
-                training=training
+                hidden_states, attention_mask=shaped_mask, training=training
             )
 
             if output_hidden_states:
@@ -495,8 +520,8 @@ class ModernGTETensorFlow(tf.keras.Model):
             pooled_output = pooled_output[:, 0]  # [B, d_model]
 
         outputs = {
-            "dense_vecs": pooled_output,       # ex) CLS벡터
-            "last_hidden_state": hidden_states
+            "dense_vecs": pooled_output,  # ex) CLS벡터
+            "last_hidden_state": hidden_states,
         }
         if output_hidden_states:
             outputs["hidden_states"] = all_hidden_states
@@ -506,36 +531,35 @@ class ModernGTETensorFlow(tf.keras.Model):
 def save_model_with_tokenizer(model, tokenizer, save_path):
     """Model + Tokenizer 저장 예시"""
     os.makedirs(save_path, exist_ok=True)
-    model_save_path = os.path.join(save_path, 'model')
+    model_save_path = os.path.join(save_path, "model")
 
     # 더미 입력으로 build
     dummy_inputs = {
-        'input_ids': tf.zeros((2, 12), dtype=tf.int32),
-        'attention_mask': tf.ones((2, 12), dtype=tf.int32)
+        "input_ids": tf.zeros((2, 12), dtype=tf.int32),
+        "attention_mask": tf.ones((2, 12), dtype=tf.int32),
     }
     _ = model(dummy_inputs, training=False, output_hidden_states=True)
 
-    @tf.function(input_signature=[
-        tf.TensorSpec(shape=[None, None], dtype=tf.int32, name='input_ids'),
-        tf.TensorSpec(shape=[None, None], dtype=tf.int32, name='attention_mask')
-    ])
+    @tf.function(
+        input_signature=[
+            tf.TensorSpec(shape=[None, None], dtype=tf.int32, name="input_ids"),
+            tf.TensorSpec(shape=[None, None], dtype=tf.int32, name="attention_mask"),
+        ]
+    )
     def serving_fn(input_ids, attention_mask):
-        inputs = {
-            'input_ids': input_ids,
-            'attention_mask': attention_mask
-        }
+        inputs = {"input_ids": input_ids, "attention_mask": attention_mask}
         outputs = model(inputs=inputs, training=False, output_hidden_states=True)
         # hidden_states까지 반환
-        hidden_states = tf.stack(outputs['hidden_states'], axis=0)  # (num_layers+1, B, S, d_model)
+        hidden_states = tf.stack(
+            outputs["hidden_states"], axis=0
+        )  # (num_layers+1, B, S, d_model)
         return {
-            'dense_vecs': outputs['dense_vecs'],  # CLS Token
-            'hidden_states': hidden_states,
+            "dense_vecs": outputs["dense_vecs"],  # CLS Token
+            "hidden_states": hidden_states,
         }
 
     tf.saved_model.save(
-        model,
-        model_save_path,
-        signatures={'serving_default': serving_fn}
+        model, model_save_path, signatures={"serving_default": serving_fn}
     )
 
     tokenizer.save_pretrained(save_path)
